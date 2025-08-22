@@ -31,6 +31,23 @@ class BScanProcessor:
         self.signal_utils = SignalUtils()  # 信号处理工具
         self.file_utils = FileUtils()  # 文件处理工具
         
+    def read_txt_signal(self, file_path: str) -> Tuple[np.ndarray, float]:
+        """
+        读取TXT信号文件，返回信号数据和采样率
+        
+        Args:
+            file_path: 文件路径
+            
+        Returns:
+            Tuple[np.ndarray, float]: 信号数据和采样率
+        """
+        try:
+            time_data, signal_data, sampling_rate = FileUtils.read_txt_file(file_path)
+            return signal_data, sampling_rate
+        except Exception as e:
+            print(f"读取TXT信号文件失败: {str(e)}")
+            return None, None
+    
     def load_from_folder(self, folder_path: str, pattern: str = None) -> bool:
         """
         从文件夹加载多个信号文件
@@ -45,9 +62,9 @@ class BScanProcessor:
         try:
             # 获取文件夹中的所有TXT文件
             if pattern:
-                txt_files = self.file_utils.get_files_with_pattern(folder_path, pattern)
+                txt_files = FileUtils.get_files_with_pattern(folder_path, pattern)
             else:
-                txt_files = self.file_utils.get_files_with_extension(folder_path, ".txt")
+                txt_files = FileUtils.get_files_with_extension(folder_path, ".txt")
             
             if not txt_files:
                 print(f"在文件夹 {folder_path} 中未找到匹配的TXT文件")
@@ -64,7 +81,7 @@ class BScanProcessor:
             
             # 加载每个文件
             for file_path in sorted(txt_files):
-                signal_data, sampling_rate = self.file_utils.read_txt_signal(file_path)
+                signal_data, sampling_rate = self.read_txt_signal(file_path)
                 
                 if signal_data is not None and sampling_rate is not None:
                     # 保存信号数据和采样率
@@ -312,7 +329,7 @@ class BScanProcessor:
             }
             
             # 使用FileUtils保存到MAT文件
-            self.file_utils.save_to_mat(output_path, data_dict)
+            FileUtils.save_to_mat(output_path, **data_dict)
             print(f"B扫描数据已成功保存到 {output_path}")
             return True
         except Exception as e:
@@ -331,7 +348,7 @@ class BScanProcessor:
         """
         try:
             # 使用FileUtils加载MAT文件
-            data_dict = self.file_utils.load_from_mat(file_path)
+            data_dict = FileUtils.read_mat_file(file_path)
             
             if data_dict is not None and 'bscan_data' in data_dict:
                 self.bscan_data = data_dict['bscan_data']

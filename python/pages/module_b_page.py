@@ -16,14 +16,17 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from modules.module_b import BScanProcessor, BScanVisualizer
 from utils.file_utils import FileUtils
 
-def app():
+def module_b_page():
     """
     B扫描信号处理页面
     """
     st.title("B扫描信号处理")
     
-    # 初始化处理器和可视化器
-    processor = BScanProcessor()
+    # 初始化session state
+    if 'processor_b' not in st.session_state:
+        st.session_state.processor_b = BScanProcessor()
+    
+    processor = st.session_state.processor_b
     visualizer = BScanVisualizer()
     
     # 创建侧边栏
@@ -102,10 +105,11 @@ def app():
                 # 加载数据
                 if data_source == "文件夹":
                     st.write(f"从文件夹加载数据: {folder_path}")
-                    if position_from_filename:
-                        processor.load_from_folder(folder_path, file_pattern, position_pattern)
+                    success = processor.load_from_folder(folder_path, file_pattern)
+                    if success:
+                        st.success(f"✅ 成功加载 {len(processor.signals)} 个信号文件")
                     else:
-                        processor.load_from_folder(folder_path, file_pattern)
+                        st.error("❌ 文件加载失败，请检查文件夹路径和文件格式")
                 else:  # MAT文件
                     # 保存上传的文件到临时位置
                     file_path = os.path.join(os.path.dirname(__file__), "..\\temp", mat_file.name)
@@ -132,9 +136,9 @@ def app():
                 # 创建B扫描图像
                 if use_envelope:
                     envelope_method_str = "hilbert" if envelope_method == "希尔伯特变换" else "peak"
-                    processor.create_bscan_image(use_envelope=True, envelope_method=envelope_method_str, normalize=normalize_bscan)
+                    processor.create_bscan(normalize=normalize_bscan, envelope=True, method=envelope_method_str)
                 else:
-                    processor.create_bscan_image(use_envelope=False, normalize=normalize_bscan)
+                    processor.create_bscan(normalize=normalize_bscan, envelope=False)
                 
                 # 保存结果
                 if save_results:
@@ -147,17 +151,17 @@ def app():
                 if plot_type == "B扫描图像":
                     if use_plotly:
                         fig = visualizer.plot_bscan_interactive(
-                            processor.bscan_image, 
-                            processor.position_axis, 
+                            processor.bscan_data, 
                             processor.time_axis, 
+                            processor.positions, 
                             title="B扫描图像"
                         )
                         st.plotly_chart(fig, use_container_width=True)
                     else:
                         fig = visualizer.plot_bscan(
-                            processor.bscan_image, 
-                            processor.position_axis, 
+                            processor.bscan_data, 
                             processor.time_axis, 
+                            processor.positions, 
                             title="B扫描图像", 
                             show=False
                         )
@@ -165,43 +169,43 @@ def app():
                 
                 elif plot_type == "指定位置信号":
                     # 确保位置索引在有效范围内
-                    max_pos_idx = processor.bscan_image.shape[0] - 1
+                    max_pos_idx = len(processor.positions) - 1
                     position_index = min(position_index, max_pos_idx)
                     
-                    if use_plotly:
-                        fig = visualizer.plot_signal_at_position_interactive(
-                            processor.bscan_image, 
-                            position_index, 
-                            processor.position_axis, 
-                            processor.time_axis, 
-                            title=f"位置 {processor.position_axis[position_index]} 处的信号"
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        fig = visualizer.plot_signal_at_position(
-                            processor.bscan_image, 
-                            position_index, 
-                            processor.position_axis, 
-                            processor.time_axis, 
-                            title=f"位置 {processor.position_axis[position_index]} 处的信号", 
-                            show=False
-                        )
-                        st.pyplot(fig)
+                    time_axis, signal = processor.get_signal_at_position(position_index)
+                    if time_axis is not None and signal is not None:
+                        if use_plotly:
+                            fig = visualizer.plot_signal_at_position_interactive(
+                                time_axis, 
+                                signal, 
+                                processor.positions[position_index], 
+                                title=f"位置 {processor.positions[position_index]} 处的信号"
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            fig = visualizer.plot_signal_at_position(
+                                time_axis, 
+                                signal, 
+                                processor.positions[position_index], 
+                                title=f"位置 {processor.positions[position_index]} 处的信号", 
+                                show=False
+                            )
+                            st.pyplot(fig)
                 
                 elif plot_type == "瀑布图":
                     if use_plotly:
                         fig = visualizer.plot_waterfall_interactive(
-                            processor.bscan_image, 
-                            processor.position_axis, 
+                            processor.bscan_data, 
                             processor.time_axis, 
+                            processor.positions, 
                             title="B扫描瀑布图"
                         )
                         st.plotly_chart(fig, use_container_width=True)
                     else:
                         fig = visualizer.plot_waterfall(
-                            processor.bscan_image, 
-                            processor.position_axis, 
+                            processor.bscan_data, 
                             processor.time_axis, 
+                            processor.positions, 
                             title="B扫描瀑布图", 
                             show=False
                         )
@@ -210,17 +214,17 @@ def app():
                 elif plot_type == "3D B扫描图像":
                     if use_plotly:
                         fig = visualizer.plot_bscan_3d_interactive(
-                            processor.bscan_image, 
-                            processor.position_axis, 
+                            processor.bscan_data, 
                             processor.time_axis, 
+                            processor.positions, 
                             title="3D B扫描图像"
                         )
                         st.plotly_chart(fig, use_container_width=True)
                     else:
                         fig = visualizer.plot_bscan_3d(
-                            processor.bscan_image, 
-                            processor.position_axis, 
+                            processor.bscan_data, 
                             processor.time_axis, 
+                            processor.positions, 
                             title="3D B扫描图像", 
                             show=False
                         )
@@ -228,45 +232,45 @@ def app():
                 
                 elif plot_type == "指定时间点位置切片":
                     # 确保时间索引在有效范围内
-                    max_time_idx = processor.bscan_image.shape[1] - 1
+                    max_time_idx = processor.bscan_data.shape[1] - 1
                     time_index = min(time_index, max_time_idx)
                     
-                    if use_plotly:
-                        fig = visualizer.plot_position_slice_at_time_interactive(
-                            processor.bscan_image, 
-                            time_index, 
-                            processor.position_axis, 
-                            processor.time_axis, 
-                            title=f"时间 {processor.time_axis[time_index]:.6f} s 的位置切片"
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        fig = visualizer.plot_position_slice_at_time(
-                            processor.bscan_image, 
-                            time_index, 
-                            processor.position_axis, 
-                            processor.time_axis, 
-                            title=f"时间 {processor.time_axis[time_index]:.6f} s 的位置切片", 
-                            show=False
-                        )
-                        st.pyplot(fig)
+                    positions, signal = processor.get_signal_at_time(time_index)
+                    if positions is not None and signal is not None:
+                        if use_plotly:
+                            fig = visualizer.plot_signal_at_time_interactive(
+                                positions, 
+                                signal, 
+                                processor.time_axis[time_index], 
+                                title=f"时间 {processor.time_axis[time_index]:.6f} s 的位置切片"
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            fig = visualizer.plot_signal_at_time(
+                                positions, 
+                                signal, 
+                                processor.time_axis[time_index], 
+                                title=f"时间 {processor.time_axis[time_index]:.6f} s 的位置切片", 
+                                show=False
+                            )
+                            st.pyplot(fig)
                 
                 # 显示B扫描参数
                 st.subheader("B扫描参数")
-                st.write(f"采样率: {processor.fs} Hz")
-                st.write(f"位置数量: {len(processor.position_axis)}")
-                st.write(f"每个信号的采样点数: {processor.bscan_image.shape[1]}")
-                st.write(f"信号持续时间: {processor.signal_duration:.6f} 秒")
+                st.write(f"采样率: {processor.sampling_rate} Hz")
+                st.write(f"位置数量: {len(processor.positions)}")
+                st.write(f"每个信号的采样点数: {processor.bscan_data.shape[1]}")
+                st.write(f"信号持续时间: {len(processor.time_axis)/processor.sampling_rate:.6f} 秒")
                 
                 # 显示统计信息
                 st.subheader("B扫描统计信息")
                 stats_df = pd.DataFrame({
                     "参数": ["最大值", "最小值", "均值", "标准差"],
                     "值": [
-                        f"{np.max(processor.bscan_image):.6f}",
-                        f"{np.min(processor.bscan_image):.6f}",
-                        f"{np.mean(processor.bscan_image):.6f}",
-                        f"{np.std(processor.bscan_image):.6f}"
+                        f"{np.max(processor.bscan_data):.6f}",
+                        f"{np.min(processor.bscan_data):.6f}",
+                        f"{np.mean(processor.bscan_data):.6f}",
+                        f"{np.std(processor.bscan_data):.6f}"
                     ]
                 })
                 st.table(stats_df)
@@ -320,4 +324,4 @@ def app():
         """)
 
 if __name__ == "__main__":
-    app()
+    module_b_page()
