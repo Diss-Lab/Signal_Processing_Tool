@@ -8,7 +8,7 @@ function ReadB()
     
     % 全局变量
     app_data = struct();
-    app_data.selected_folder = '';
+    app_data.selected_files = {};
     app_data.data_xyt = [];
     app_data.data_time = [];
     app_data.fs = 0;
@@ -28,13 +28,13 @@ function ReadB()
         uicontrol('Style', 'text', 'String', 'Step 1: Load and Process TXT Files', ...
                   'Position', [90, 350, 300, 25], 'FontSize', 14, 'FontWeight', 'bold');
         
-        % 文件夹选择按钮
-        uicontrol('Style', 'pushbutton', 'String', 'Browse Folder', ...
+        % 多文件选择按钮
+        uicontrol('Style', 'pushbutton', 'String', 'Select Multiple TXT Files', ...
                   'Position', [150, 290, 200, 40], 'FontSize', 12, ...
-                  'BackgroundColor', [0.8 0.9 1.0], 'Callback', @browse_and_process_folder);
+                  'BackgroundColor', [0.8 0.9 1.0], 'Callback', @browse_and_process_files);
         
-        % 文件夹选择说明
-        uicontrol('Style', 'text', 'String', 'Select folder containing numbered TXT files (1.txt, 2.txt, ...)', ...
+        % 文件选择说明
+        uicontrol('Style', 'text', 'String', 'Select multiple TXT files (Ctrl+Click or Shift+Click for multiple selection)', ...
                   'Position', [50, 260, 400, 20], 'FontSize', 10, ...
                   'HorizontalAlignment', 'center', 'ForegroundColor', [0.5 0.5 0.5]);
         
@@ -65,21 +65,33 @@ function ReadB()
                   'HorizontalAlignment', 'center', 'ForegroundColor', [0.6 0.6 0.6]);
     end
     
-    function browse_and_process_folder(~, ~)
-        folder = uigetdir('', 'Select folder containing numbered TXT files');
+    function browse_and_process_files(~, ~)
+        % 使用uigetfile支持多文件选择
+        [filenames, pathname] = uigetfile('*.txt', 'Select TXT Files', 'MultiSelect', 'on');
         
-        if isequal(folder, 0)
-            return;
+        if isequal(filenames, 0)
+            return; % 用户取消了选择
         end
         
-        app_data.selected_folder = folder;
+        % 确保filenames是cell数组
+        if ischar(filenames)
+            filenames = {filenames};
+        end
+        
+        % 构建完整路径
+        full_paths = cell(size(filenames));
+        for i = 1:length(filenames)
+            full_paths{i} = fullfile(pathname, filenames{i});
+        end
+        
+        app_data.selected_files = full_paths;
         
         % 更新状态显示
-        set(app_data.status_text, 'String', sprintf('Processing folder:\n%s', folder));
+        set(app_data.status_text, 'String', sprintf('Processing %d files...\nPlease wait...', length(full_paths)));
         drawnow;
         
-        % 调用数据处理模块
-        [success, processed_data] = b_scan_processor.process_folder(folder);
+        % 立即调用数据处理模块
+        [success, processed_data] = b_scan_processor.process_files(full_paths, pathname);
         
         if success
             app_data.data_xyt = processed_data.data_xyt;
@@ -88,28 +100,29 @@ function ReadB()
             app_data.file_count = processed_data.file_count;
             
             % 更新状态
-            status_msg = sprintf('Processing complete:\n%d files processed successfully', app_data.file_count);
+            status_msg = sprintf('Processing complete!\n%d files processed successfully', app_data.file_count);
             set(app_data.status_text, 'String', status_msg);
+            
+            % 刷新界面显示文件计数
+            create_main_ui();
             
             % 询问是否立即进行分析
             choice = questdlg(sprintf('%d files processed successfully! Do you want to start B-Scan analysis now?', app_data.file_count), ...
                              'Analysis Option', 'Yes', 'No', 'Yes');
             if strcmp(choice, 'Yes')
                 open_analysis();
-                return;
             end
         else
-            set(app_data.status_text, 'String', 'Processing failed. Please check the folder and try again.');
+            set(app_data.status_text, 'String', 'Processing failed. Please check the files and try again.');
         end
-        
-        create_main_ui();
     end
     
     function open_analysis(~, ~)
         if isempty(app_data.data_xyt)
-            % 尝试从选择的文件夹加载已处理的数据
-            if ~isempty(app_data.selected_folder)
-                data_file = fullfile(app_data.selected_folder, 'data.mat');
+            % 尝试从最近处理的文件夹加载已处理的数据
+            if ~isempty(app_data.selected_files)
+                [pathname, ~, ~] = fileparts(app_data.selected_files{1});
+                data_file = fullfile(pathname, 'data.mat');
                 if exist(data_file, 'file')
                     try
                         loaded = load(data_file);
@@ -126,7 +139,7 @@ function ReadB()
                     return;
                 end
             else
-                msgbox('Please select folder and process files first!', 'Error', 'error');
+                msgbox('Please select and process files first!', 'Error', 'error');
                 return;
             end
         end

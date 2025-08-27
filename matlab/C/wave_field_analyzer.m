@@ -4,9 +4,20 @@ classdef wave_field_analyzer < handle
     methods (Static)
         function create_analysis_ui(data_xyt, data_time, fs)
             % 创建波场分析界面
-            try
+            % try
+                % 验证输入参数
+                if nargin < 3
+                    error('需要三个参数: data_xyt, data_time, fs');
+                end
+                
+                if isempty(data_xyt) || isempty(data_time) || fs <= 0
+                    error('输入参数无效');
+                end
+                
+                fprintf('创建分析界面 - 数据尺寸: %s\n', mat2str(size(data_xyt)));
+                
                 % 创建分析窗口
-                analysis_fig = figure('Name', 'Wave Field Analysis', 'Position', [100, 50, 1400, 800], ...
+                analysis_fig = figure('Name', 'Wave Field Analysis', 'Position', [100, 50, 1000, 800], ...
                                      'MenuBar', 'none', 'ToolBar', 'none');
                 
                 % 左侧控制面板
@@ -69,12 +80,45 @@ classdef wave_field_analyzer < handle
                           'Position', [80, 370, 60, 25], 'BackgroundColor', [1.0 0.8 0.8], ...
                           'Callback', @stop_animation);
                 
+                % 播放速度控制
+                uicontrol('Parent', control_panel, 'Style', 'text', 'String', 'Speed Control:', ...
+                          'Position', [10, 340, 100, 20], 'FontWeight', 'bold');
+                
+                % 速度滑块
+                speed_slider = uicontrol('Parent', control_panel, 'Style', 'slider', ...
+                                        'Position', [10, 315, 150, 20], ...
+                                        'Min', 0.1, 'Max', 5.0, 'Value', 1.0, ...
+                                        'SliderStep', [0.1/4.9, 0.5/4.9]);
+                
+                % 速度显示文本
+                speed_text = uicontrol('Parent', control_panel, 'Style', 'text', ...
+                                      'String', 'Speed: 1.0x', ...
+                                      'Position', [170, 315, 50, 50], ...
+                                      'HorizontalAlignment', 'left');
+                
+                % 预设速度按钮
+                uicontrol('Parent', control_panel, 'Style', 'pushbutton', 'String', '0.5x', ...
+                          'Position', [10, 290, 35, 20], 'FontSize', 8, ...
+                          'Callback', @(~,~) set_speed(0.5));
+                
+                uicontrol('Parent', control_panel, 'Style', 'pushbutton', 'String', '1x', ...
+                          'Position', [50, 290, 35, 20], 'FontSize', 8, ...
+                          'Callback', @(~,~) set_speed(1.0));
+                
+                uicontrol('Parent', control_panel, 'Style', 'pushbutton', 'String', '2x', ...
+                          'Position', [90, 290, 35, 20], 'FontSize', 8, ...
+                          'Callback', @(~,~) set_speed(2.0));
+                
+                uicontrol('Parent', control_panel, 'Style', 'pushbutton', 'String', '5x', ...
+                          'Position', [130, 290, 35, 20], 'FontSize', 8, ...
+                          'Callback', @(~,~) set_speed(5.0));
+                
                 % 信息显示
                 info_text = uicontrol('Parent', control_panel, 'Style', 'text', ...
                                      'String', sprintf('Data Info:\nSize: %dx%dx%d\nSampling: %.2f MHz\nDuration: %.2f ms', ...
                                                       size(data_xyt,1), size(data_xyt,2), size(data_xyt,3), ...
                                                       fs/1e6, (data_time(end)-data_time(1))*1000), ...
-                                     'Position', [10, 250, 200, 100], ...
+                                     'Position', [10, 150, 200, 100], ...
                                      'HorizontalAlignment', 'left', ...
                                      'BackgroundColor', [0.9 0.9 0.9]);
                 
@@ -102,23 +146,28 @@ classdef wave_field_analyzer < handle
                 current_time_idx = 1;
                 filtered_data = data_xyt;
                 animation_timer = [];
+                animation_speed = 1.0; % 播放速度倍数
+                base_period = 0.1; % 基础播放周期（秒）
+                is_playing = false; % 动画播放状态
                 
                 % 初始显示
                 update_wavefield();
                 
+                fprintf('分析界面创建成功\n');
+                
                 % 回调函数
                 function apply_filter(~, ~)
-                    filter_type = get(filter_popup, 'Value');
-                    low_freq = str2double(get(low_freq_edit, 'String')) * 1000; % 转换为Hz
-                    high_freq = str2double(get(high_freq_edit, 'String')) * 1000; % 转换为Hz
-                    
                     try
+                        filter_type = get(filter_popup, 'Value');
+                        low_freq = str2double(get(low_freq_edit, 'String')) * 1000; % 转换为Hz
+                        high_freq = str2double(get(high_freq_edit, 'String')) * 1000; % 转换为Hz
+                        
                         if filter_type == 1 % No Filter
                             filtered_data = data_xyt;
                             msgbox('Filter removed', 'Info');
                         else
-                            % 应用简单滤波（需要Signal Processing Toolbox）
-                            filtered_data = apply_3d_filter(data_xyt, filter_type, low_freq, high_freq, fs);
+                            % 应用滤波器
+                            filtered_data = apply_3d_filter_helper(data_xyt, filter_type, low_freq, high_freq, fs);
                             msgbox('Filter applied successfully!', 'Success');
                         end
                         
@@ -130,150 +179,342 @@ classdef wave_field_analyzer < handle
                 end
                 
                 function update_time(~, ~)
-                    current_time_idx = round(get(time_slider, 'Value'));
-                    set(time_text, 'String', sprintf('Time: %.2f μs', data_time(current_time_idx)*1e6));
-                    update_wavefield();
+                    try
+                        current_time_idx = round(get(time_slider, 'Value'));
+                        set(time_text, 'String', sprintf('Time: %.2f μs', data_time(current_time_idx)*1e6));
+                        update_wavefield();
+                    catch ME
+                        fprintf('更新时间失败: %s\n', ME.message);
+                    end
                 end
                 
                 function update_wavefield()
-                    % 显示当前时刻的波场
-                    axes(wave_axes);
-                    cla;
-                    
-                    wave_field = squeeze(filtered_data(:, :, current_time_idx));
-                    
-                    imagesc(wave_field);
-                    axis equal;
-                    axis tight;
-                    
-                    % 设置颜色映射
-                    colormap_names = get(colormap_popup, 'String');
-                    colormap_idx = get(colormap_popup, 'Value');
-                    colormap(wave_axes, colormap_names{colormap_idx});
-                    colorbar(wave_axes);
-                    
-                    title(wave_axes, sprintf('Wave Field at t = %.2f μs', data_time(current_time_idx)*1e6));
-                    xlabel(wave_axes, 'X Position');
-                    ylabel(wave_axes, 'Y Position');
-                    
-                    % 设置点击回调
-                    set(wave_axes, 'ButtonDownFcn', @wavefield_click);
-                end
-                
-                function wavefield_click(~, ~)
-                    point = get(wave_axes, 'CurrentPoint');
-                    x_idx = round(point(1, 2));
-                    y_idx = round(point(1, 1));
-                    
-                    [m_size, n_size, ~] = size(filtered_data);
-                    if x_idx >= 1 && x_idx <= m_size && y_idx >= 1 && y_idx <= n_size
-                        % 提取该点的时域信号
-                        point_signal = squeeze(filtered_data(x_idx, y_idx, :));
-                        
-                        % 绘制时域信号
-                        axes(time_axes);
+                    try
+                        % 显示当前时刻的波场
+                        axes(wave_axes);
                         cla;
-                        plot(data_time * 1e6, point_signal, 'b-', 'LineWidth', 1.5);
-                        title(sprintf('Time Domain Signal - Point (%d,%d)', x_idx, y_idx));
-                        xlabel('Time (μs)');
-                        ylabel('Amplitude');
-                        grid on;
-                        set(time_axes, 'ButtonDownFcn', @time_click);
                         
-                        % 绘制频域信号
-                        axes(freq_axes);
-                        cla;
-                        try
-                            [freq_vector, magnitude] = compute_fft(point_signal, fs);
-                            plot(freq_vector, magnitude, 'r-', 'LineWidth', 1.5);
-                            title(sprintf('Frequency Spectrum - Point (%d,%d)', x_idx, y_idx));
-                            xlabel('Frequency (kHz)');
-                            ylabel('Magnitude');
-                            grid on;
-                            set(freq_axes, 'ButtonDownFcn', @freq_click);
-                        catch
-                            text(0.5, 0.5, 'FFT computation failed', 'Units', 'normalized', ...
-                                 'HorizontalAlignment', 'center');
-                        end
+                        wave_field = squeeze(filtered_data(:, :, current_time_idx));
                         
-                        % 更新点击信息
-                        set(click_text, 'String', sprintf('Selected Point:\nPosition: (%d, %d)\nMax Amplitude: %.2e\nRMS: %.2e', ...
-                                                         x_idx, y_idx, max(abs(point_signal)), rms(point_signal)));
+                        % 使用imagesc绘制并获取图像句柄
+                        h_image = imagesc(wave_field);
+                        axis equal;
+                        axis tight;
+                        
+                        % 设置颜色映射
+                        colormap_names = get(colormap_popup, 'String');
+                        colormap_idx = get(colormap_popup, 'Value');
+                        colormap(wave_axes, colormap_names{colormap_idx});
+                        colorbar(wave_axes);
+                        
+                        title(wave_axes, sprintf('Wave Field at t = %.2f μs', data_time(current_time_idx)*1e6));
+                        xlabel(wave_axes, 'X Position');
+                        ylabel(wave_axes, 'Y Position');
+                        
+                        % 同时设置轴和图像的点击回调
+                        set(wave_axes, 'ButtonDownFcn', @wavefield_click);
+                        set(h_image, 'ButtonDownFcn', @wavefield_click);
+                        
+                        % 确保轴可以响应点击
+                        set(wave_axes, 'HitTest', 'on');
+                        set(h_image, 'HitTest', 'on');
+                        
+                    catch ME
+                        fprintf('更新波场显示失败: %s\n', ME.message);
                     end
                 end
                 
-                function time_click(~, ~)
-                    point = get(time_axes, 'CurrentPoint');
-                    x_coord = point(1, 1); % 时间 (μs)
-                    y_coord = point(1, 2); % 幅值
-                    
-                    set(click_text, 'String', sprintf('Time Domain Click:\nTime: %.2f μs\nAmplitude: %.4e', ...
-                                                     x_coord, y_coord));
+                function wavefield_click(src, ~)
+                    try
+                        % 获取点击位置
+                        if src == wave_axes
+                            point = get(wave_axes, 'CurrentPoint');
+                        else
+                            % 如果是图像对象被点击，获取轴的CurrentPoint
+                            point = get(get(src, 'Parent'), 'CurrentPoint');
+                        end
+                        
+                        % 转换坐标（注意imagesc的坐标系统）
+                        x_idx = round(point(1, 2)); % Y坐标对应行索引
+                        y_idx = round(point(1, 1)); % X坐标对应列索引
+                        
+                        [m_size, n_size, ~] = size(filtered_data);
+                        
+                        % 检查坐标是否在有效范围内
+                        if x_idx >= 1 && x_idx <= m_size && y_idx >= 1 && y_idx <= n_size
+                            fprintf('点击位置: (%d, %d)\n', x_idx, y_idx);
+                            
+                            % 提取该点的时域信号
+                            point_signal = squeeze(filtered_data(x_idx, y_idx, :));
+                            
+                            % 绘制时域信号
+                            axes(time_axes);
+                            cla;
+                            h_time = plot(data_time * 1e6, point_signal, 'b-', 'LineWidth', 1.5);
+                            title(sprintf('Time Domain Signal - Point (%d,%d)', x_idx, y_idx));
+                            xlabel('Time (μs)');
+                            ylabel('Amplitude');
+                            grid on;
+                            
+                            % 设置时域图的点击回调
+                            set(time_axes, 'ButtonDownFcn', @time_click);
+                            set(h_time, 'ButtonDownFcn', @time_click);
+                            
+                            % 绘制频域信号
+                            axes(freq_axes);
+                            cla;
+                            try
+                                [freq_vector, magnitude] = compute_fft_helper(point_signal, fs);
+                                h_freq = plot(freq_vector, magnitude, 'r-', 'LineWidth', 1.5);
+                                title(sprintf('Frequency Spectrum - Point (%d,%d)', x_idx, y_idx));
+                                xlabel('Frequency (kHz)');
+                                ylabel('Magnitude');
+                                grid on;
+                                
+                                % 设置频域图的点击回调
+                                set(freq_axes, 'ButtonDownFcn', @freq_click);
+                                set(h_freq, 'ButtonDownFcn', @freq_click);
+                                
+                            catch ME
+                                fprintf('FFT计算失败: %s\n', ME.message);
+                                text(0.5, 0.5, 'FFT computation failed', 'Units', 'normalized', ...
+                                     'HorizontalAlignment', 'center');
+                            end
+                            
+                            % 更新点击信息
+                            max_amp = max(abs(point_signal));
+                            rms_val = sqrt(mean(point_signal.^2)); % 使用更准确的RMS计算
+                            
+                            set(click_text, 'String', sprintf('Selected Point:\nPosition: (%d, %d)\nMax Amplitude: %.2e\nRMS: %.2e\nClick successful!', ...
+                                                             x_idx, y_idx, max_amp, rms_val));
+                        else
+                            fprintf('点击位置超出范围: (%d, %d), 有效范围: [1-%d, 1-%d]\n', x_idx, y_idx, m_size, n_size);
+                            set(click_text, 'String', sprintf('Click out of range:\nClicked: (%d, %d)\nValid range: [1-%d, 1-%d]', ...
+                                                             x_idx, y_idx, m_size, n_size));
+                        end
+                        
+                    catch ME
+                        fprintf('波场点击处理失败: %s\n', ME.message);
+                        set(click_text, 'String', sprintf('Click processing failed:\n%s', ME.message));
+                    end
                 end
                 
-                function freq_click(~, ~)
-                    point = get(freq_axes, 'CurrentPoint');
-                    x_coord = point(1, 1); % 频率 (kHz)
-                    y_coord = point(1, 2); % 幅值
-                    
-                    set(click_text, 'String', sprintf('Frequency Domain Click:\nFrequency: %.1f kHz\nMagnitude: %.2e', ...
-                                                     x_coord, y_coord));
+                function time_click(src, ~)
+                    try
+                        % 获取时域图点击位置
+                        if src == time_axes
+                            point = get(time_axes, 'CurrentPoint');
+                        else
+                            point = get(get(src, 'Parent'), 'CurrentPoint');
+                        end
+                        
+                        x_coord = point(1, 1); % 时间 (μs)
+                        y_coord = point(1, 2); % 幅值
+                        
+                        set(click_text, 'String', sprintf('Time Domain Click:\nTime: %.2f μs\nAmplitude: %.4e', ...
+                                                         x_coord, y_coord));
+                    catch ME
+                        fprintf('时域图点击失败: %s\n', ME.message);
+                    end
+                end
+                
+                function freq_click(src, ~)
+                    try
+                        % 获取频域图点击位置
+                        if src == freq_axes
+                            point = get(freq_axes, 'CurrentPoint');
+                        else
+                            point = get(get(src, 'Parent'), 'CurrentPoint');
+                        end
+                        
+                        x_coord = point(1, 1); % 频率 (kHz)
+                        y_coord = point(1, 2); % 幅值
+                        
+                        set(click_text, 'String', sprintf('Frequency Domain Click:\nFrequency: %.1f kHz\nMagnitude: %.2e', ...
+                                                         x_coord, y_coord));
+                    catch ME
+                        fprintf('频域图点击失败: %s\n', ME.message);
+                    end
                 end
                 
                 function play_animation(~, ~)
-                    if ~isempty(animation_timer)
-                        stop(animation_timer);
-                        delete(animation_timer);
+                    if is_playing
+                        % 如果已在播放，先停止
+                        stop_animation();
                     end
                     
-                    animation_timer = timer('ExecutionMode', 'fixedRate', 'Period', 0.1, ...
-                                           'TimerFcn', @animate_frame);
-                    start(animation_timer);
-                end
-                
-                function stop_animation(~, ~)
-                    if ~isempty(animation_timer)
+                    % 清理旧的定时器
+                    if ~isempty(animation_timer) && isvalid(animation_timer)
                         stop(animation_timer);
                         delete(animation_timer);
                         animation_timer = [];
                     end
+                    
+                    % 根据当前速度设置定时器周期
+                    current_period = base_period / animation_speed;
+                    
+                    % 创建新的定时器
+                    animation_timer = timer(...
+                        'ExecutionMode', 'fixedRate', ...
+                        'Period', current_period, ...
+                        'TimerFcn', @animate_frame, ...
+                        'StopFcn', @animation_stopped, ...
+                        'ErrorFcn', @animation_error);
+                    
+                    % 启动定时器
+                    start(animation_timer);
+                    is_playing = true;
+                    
+                    fprintf('动画开始播放，周期: %.3f秒\n', current_period);
+                end
+                
+                function stop_animation(~, ~)
+                    if ~isempty(animation_timer) && isvalid(animation_timer)
+                        try
+                            stop(animation_timer);
+                            delete(animation_timer);
+                        catch
+                            % 忽略停止错误
+                        end
+                        animation_timer = [];
+                    end
+                    is_playing = false;
+                    fprintf('动画已停止\n');
+                end
+                
+                function animation_stopped(~, ~)
+                    % 定时器停止回调
+                    is_playing = false;
+                    fprintf('定时器已停止\n');
+                end
+                
+                function animation_error(timer_obj, ~)
+                    % 定时器错误回调
+                    fprintf('定时器错误，正在清理\n');
+                    try
+                        stop(timer_obj);
+                        delete(timer_obj);
+                    catch
+                        % 忽略清理错误
+                    end
+                    animation_timer = [];
+                    is_playing = false;
                 end
                 
                 function animate_frame(~, ~)
-                    current_time_idx = current_time_idx + 1;
-                    if current_time_idx > length(data_time)
-                        current_time_idx = 1;
+                    try
+                        % 检查figure是否仍然存在
+                        if ~ishandle(analysis_fig)
+                            stop_animation();
+                            return;
+                        end
+                        
+                        % 更新时间索引
+                        current_time_idx = current_time_idx + 1;
+                        if current_time_idx > length(data_time)
+                            current_time_idx = 1;
+                        end
+                        
+                        % 更新界面（使用try-catch防止界面更新错误）
+                        try
+                            set(time_slider, 'Value', current_time_idx);
+                            set(time_text, 'String', sprintf('Time: %.2f μs', data_time(current_time_idx)*1e6));
+                            update_wavefield();
+                        catch ME
+                            fprintf('界面更新失败: %s\n', ME.message);
+                            stop_animation();
+                        end
+                        
+                        % 强制刷新显示
+                        drawnow limitrate;
+                        
+                    catch ME
+                        fprintf('动画帧更新失败: %s\n', ME.message);
+                        stop_animation();
                     end
+                end
+                
+                function set_speed(speed_value)
+                    % 设置播放速度
+                    animation_speed = speed_value;
+                    set(speed_slider, 'Value', speed_value);
+                    set(speed_text, 'String', sprintf('Speed: %.1fx', speed_value));
                     
-                    set(time_slider, 'Value', current_time_idx);
-                    set(time_text, 'String', sprintf('Time: %.2f μs', data_time(current_time_idx)*1e6));
-                    update_wavefield();
+                    % 如果动画正在播放，重新启动以应用新速度
+                    if is_playing
+                        % 停止当前动画
+                        stop_animation();
+                        
+                        % 稍微延迟后重新启动（确保停止完成）
+                        pause(0.05);
+                        
+                        % 重新启动动画
+                        play_animation();
+                    end
+                end
+                
+                function update_speed_from_slider(~, ~)
+                    % 从滑块更新播放速度
+                    speed_value = get(speed_slider, 'Value');
+                    set_speed(speed_value);
                 end
                 
                 % 设置回调函数
                 set(time_slider, 'Callback', @update_time);
                 set(colormap_popup, 'Callback', @(~,~) update_wavefield());
+                set(speed_slider, 'Callback', @update_speed_from_slider);
                 
                 % 清理函数
                 set(analysis_fig, 'CloseRequestFcn', @cleanup_and_close);
                 
                 function cleanup_and_close(~, ~)
-                    if ~isempty(animation_timer)
-                        stop(animation_timer);
-                        delete(animation_timer);
+                    try
+                        % 首先停止动画
+                        if is_playing
+                            stop_animation();
+                        end
+                        
+                        % 等待一小段时间确保定时器完全停止
+                        pause(0.1);
+                        
+                        % 清理任何剩余的定时器
+                        if ~isempty(animation_timer) && isvalid(animation_timer)
+                            try
+                                stop(animation_timer);
+                                delete(animation_timer);
+                            catch
+                                % 忽略清理错误
+                            end
+                        end
+                        
+                        % 删除figure
+                        if ishandle(analysis_fig)
+                            delete(analysis_fig);
+                        end
+                        
+                        fprintf('分析窗口已关闭\n');
+                        
+                    catch ME
+                        fprintf('清理失败: %s\n', ME.message);
+                        % 强制删除figure
+                        try
+                            delete(analysis_fig);
+                        catch
+                            % 忽略删除错误
+                        end
                     end
-                    delete(analysis_fig);
                 end
                 
-            catch ME
-                msgbox(['波场分析创建失败: ' ME.message], 'Error', 'error');
-            end
+            % catch ME
+            %     fprintf('波场分析创建失败: %s\n', getReport(ME));
+            %     msgbox(['波场分析创建失败: ' ME.message], 'Error', 'error');
+            % end
         end
     end
 end
 
-% 辅助函数
-function filtered_data = apply_3d_filter(data_xyt, filter_type, low_freq, high_freq, fs)
+% 辅助函数 - 移到类定义外部
+function filtered_data = apply_3d_filter_helper(data_xyt, filter_type, low_freq, high_freq, fs)
     % 对3D数据应用滤波器
     [m, n, t] = size(data_xyt);
     filtered_data = zeros(size(data_xyt));
@@ -281,12 +522,12 @@ function filtered_data = apply_3d_filter(data_xyt, filter_type, low_freq, high_f
     for i = 1:m
         for j = 1:n
             signal = squeeze(data_xyt(i, j, :));
-            filtered_data(i, j, :) = apply_1d_filter(signal, filter_type, low_freq, high_freq, fs);
+            filtered_data(i, j, :) = apply_1d_filter_helper(signal, filter_type, low_freq, high_freq, fs);
         end
     end
 end
 
-function filtered_signal = apply_1d_filter(signal, filter_type, low_freq, high_freq, fs)
+function filtered_signal = apply_1d_filter_helper(signal, filter_type, low_freq, high_freq, fs)
     % 对1D信号应用滤波器
     try
         nyquist = fs / 2;
@@ -314,7 +555,7 @@ function filtered_signal = apply_1d_filter(signal, filter_type, low_freq, high_f
     end
 end
 
-function [freq_vector, magnitude] = compute_fft(signal, fs)
+function [freq_vector, magnitude] = compute_fft_helper(signal, fs)
     % 计算FFT
     N = length(signal);
     Y = fft(signal);

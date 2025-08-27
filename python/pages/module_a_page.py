@@ -37,7 +37,9 @@ def module_a_page():
         
         if uploaded_file is not None:
             # 保存上传的文件到临时位置
-            temp_path = f"/tmp/{uploaded_file.name}"
+            temp_dir = os.path.join(os.path.dirname(__file__), "..", "temp")
+            os.makedirs(temp_dir, exist_ok=True)
+            temp_path = os.path.join(temp_dir, uploaded_file.name)
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
             
@@ -57,7 +59,7 @@ def module_a_page():
         # 示例数据按钮
         st.markdown("---")
         if st.button("📁 加载示例数据"):
-            example_path = "/Users/zyt/Documents/Signal_Processing_Tool/python/data/single_point/sine_wave.txt"
+            example_path = os.path.join(os.path.dirname(__file__), "..", "data", "single_point", "sine_wave.txt")
             if os.path.exists(example_path):
                 if processor.load_from_file(example_path):
                     st.success("✅ 示例数据加载成功")
@@ -294,7 +296,9 @@ def module_a_page():
         
         with col_export1:
             if st.button("📄 导出为MAT文件", use_container_width=True):
-                output_path = "/tmp/processed_signal.mat"
+                temp_dir = os.path.join(os.path.dirname(__file__), "..", "temp")
+                os.makedirs(temp_dir, exist_ok=True)
+                output_path = os.path.join(temp_dir, "processed_signal.mat")
                 if processor.save_to_mat(output_path):
                     with open(output_path, "rb") as file:
                         st.download_button(

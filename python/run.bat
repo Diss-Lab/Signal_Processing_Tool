@@ -32,6 +32,7 @@ if %ERRORLEVEL% NEQ 0 (
 REM 启动Streamlit应用
 echo 启动应用...
 cd /d "%~dp0"
-streamlit run app.py
+REM 使用Python模块方式运行，避免PATH问题
+python -m streamlit run app.py
 
 pause

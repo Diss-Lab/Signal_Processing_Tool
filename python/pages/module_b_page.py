@@ -112,8 +112,9 @@ def module_b_page():
                         st.error("❌ 文件加载失败，请检查文件夹路径和文件格式")
                 else:  # MAT文件
                     # 保存上传的文件到临时位置
-                    file_path = os.path.join(os.path.dirname(__file__), "..\\temp", mat_file.name)
-                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                    temp_dir = os.path.join(os.path.dirname(__file__), "..", "temp")
+                    os.makedirs(temp_dir, exist_ok=True)
+                    file_path = os.path.join(temp_dir, mat_file.name)
                     
                     with open(file_path, "wb") as f:
                         f.write(mat_file.getbuffer())

@@ -14,6 +14,7 @@ classdef wave_data_processor < handle
                 % 加载MAT文件
                 loaded_data = load(mat_file_path);
                 field_names = fieldnames(loaded_data);
+                fprintf('文件变量: %s\n', strjoin(field_names, ', '));
                 
                 % 检查数据格式并处理不同的MAT文件结构
                 if isfield(loaded_data, 'data_xyt') && isfield(loaded_data, 'data_time')
@@ -30,48 +31,64 @@ classdef wave_data_processor < handle
                     end
                     
                 elseif isfield(loaded_data, 'x') && isfield(loaded_data, 'y')
-                    % 另一种格式：x 为时间，y 为数据
-                    data_struct = loaded_data;
-                    data_time = data_struct.x;
-                    data_xyt_origin = data_struct.y;
-                    fs = 1 / (data_time(2) - data_time(1));
+                    % 原始数据格式：x 为时间序列(1×N)，y 为振动数据(M×N)
+                    x_data = loaded_data.x;  % 1×N 时间序列
+                    y_data = loaded_data.y;  % M×N 振动数据
+                    
+                    fprintf('原始数据尺寸: x=%s, y=%s\n', mat2str(size(x_data)), mat2str(size(y_data)));
+                    
+                    % 确保x是行向量
+                    if size(x_data, 1) > size(x_data, 2)
+                        x_data = x_data';
+                    end
+                    data_time = x_data;
+                    
+                    % 计算采样频率
+                    if length(data_time) > 1
+                        dt = mean(diff(data_time));
+                        fs = 1 / dt;
+                    else
+                        error('时间数据点数不足');
+                    end
                     
                     % 验证数据尺寸
-                    validation = wave_data_processor.validate_grid_params(grid_params, size(data_xyt_origin, 1));
-                    if ~validation.valid
-                        msgbox(validation.message, 'Grid Size Warning', 'warn');
+                    [M, N] = size(y_data);
+                    if N ~= length(data_time)
+                        error('时间序列长度与振动数据不匹配: 时间点=%d, 数据列数=%d', length(data_time), N);
+                    end
+                    
+                    % 验证网格参数
+                    expected_points = grid_params.n * grid_params.m;
+                    if M ~= expected_points
+                        warning('数据点数(%d)与网格参数(%d×%d=%d)不匹配', M, grid_params.n, grid_params.m, expected_points);
+                        % 调整网格参数以匹配数据
+                        if mod(M, grid_params.n) == 0
+                            grid_params.m = M / grid_params.n;
+                            fprintf('自动调整网格高度为: %d\n', grid_params.m);
+                        elseif mod(M, grid_params.m) == 0
+                            grid_params.n = M / grid_params.m;
+                            fprintf('自动调整网格宽度为: %d\n', grid_params.n);
+                        else
+                            error('无法将%d个数据点重排为%d×%d网格', M, grid_params.n, grid_params.m);
+                        end
                     end
                     
                     % 重塑数据
-                    data_xyt = wave_data_processor.reshape_wave_data(data_xyt_origin, grid_params);
+                    fprintf('开始重塑数据: %d个点 -> %d×%d网格\n', M, grid_params.m, grid_params.n);
+                    data_xyt = wave_data_processor.reshape_wave_data(y_data, grid_params);
                     
                 else
                     error('未知的MAT文件格式。期望变量: (data_xyt, data_time) 或 (x, y)。找到: %s', ...
                           strjoin(field_names, ', '));
                 end
                 
-                % 重新整理数据格式以匹配网格尺寸
-                if exist('data_xyt', 'var')
-                    if size(data_xyt, 1) ~= grid_params.m || size(data_xyt, 2) ~= grid_params.n
-                        % 如果尺寸不匹配，进行调整
-                        fprintf('调整数据格式以匹配网格尺寸 %dx%d\n', grid_params.m, grid_params.n);
-                        
-                        % 创建新的数据矩阵
-                        new_data_xyt = zeros(grid_params.m, grid_params.n, length(data_time));
-                        
-                        % 复制数据（如果原数据更小）
-                        copy_m = min(size(data_xyt, 1), grid_params.m);
-                        copy_n = min(size(data_xyt, 2), grid_params.n);
-                        
-                        new_data_xyt(1:copy_m, 1:copy_n, :) = data_xyt(1:copy_m, 1:copy_n, :);
-                        data_xyt = new_data_xyt;
-                    end
-                end
-                
                 % 保存处理后的数据
                 [filepath, ~, ~] = fileparts(mat_file_path);
                 save_path = fullfile(filepath, 'data.mat');
                 
+                % 保存时包含网格参数
+                m = grid_params.m;
+                n = grid_params.n;
                 save(save_path, 'data_xyt', 'data_time', 'fs', 'm', 'n');
                 
                 % 返回处理结果
@@ -83,32 +100,39 @@ classdef wave_data_processor < handle
                 
                 success = true;
                 fprintf('数据处理完成，保存到: %s\n', save_path);
+                fprintf('最终数据尺寸: %s\n', mat2str(size(data_xyt)));
                 
             catch ME
                 fprintf('处理MAT文件失败: %s\n', ME.message);
+                fprintf('错误位置: %s\n', ME.stack(1).name);
             end
         end
         
-        function data_xyt = reshape_wave_data(data_xyt_origin, grid_params)
+        function data_xyt = reshape_wave_data(y_data, grid_params)
             % 重塑波场数据
-            % 输入: data_xyt_origin - 原始数据, grid_params - 网格参数
-            % 输出: data_xyt - 重塑后的3D数据
+            % 输入: y_data - 原始振动数据 (M×N), grid_params - 网格参数
+            % 输出: data_xyt - 重塑后的3D数据 (m×n×N)
             
-            n = grid_params.n;
+            [M, N] = size(y_data);
             m = grid_params.m;
-            t = size(data_xyt_origin, 2);
+            n = grid_params.n;
+            
+            fprintf('重塑数据: %d×%d -> %d×%d×%d\n', M, N, m, n, N);
             
             % 初始化输出矩阵
-            data_xyt = zeros(m, n, t);
+            data_xyt = zeros(m, n, N);
             
             % 进度条
             h_wait = waitbar(0, 'Reshaping wave data...');
             
             try
-                % 重塑数据
-                for time_index = 1:t
-                    displacement = data_xyt_origin(:, time_index);
-                    reshaped_data = reshape(displacement, n, m)';
+                % 重塑数据 - 将每个时间点的M个空间点重排为m×n网格
+                for time_index = 1:N
+                    % 获取当前时间点的所有空间点数据
+                    spatial_data = y_data(:, time_index);  % M×1
+                    
+                    % 重塑为网格 (先按列填充，然后转置)
+                    reshaped_data = reshape(spatial_data, n, m)';  % m×n
                     
                     % 对偶数行进行翻转（扫描路径补偿）
                     for row = 1:m
@@ -118,13 +142,18 @@ classdef wave_data_processor < handle
                     end
                     
                     data_xyt(:, :, time_index) = reshaped_data;
-                    waitbar(time_index/t, h_wait);
+                    
+                    if mod(time_index, 100) == 0 || time_index == N
+                        waitbar(time_index/N, h_wait, sprintf('Processing time point %d/%d', time_index, N));
+                    end
                 end
                 
                 close(h_wait);
                 
             catch ME
-                close(h_wait);
+                if exist('h_wait', 'var') && ishandle(h_wait)
+                    close(h_wait);
+                end
                 rethrow(ME);
             end
         end
