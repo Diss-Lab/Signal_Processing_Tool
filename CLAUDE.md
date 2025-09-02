@@ -5,11 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 上下文规则！！
 
 - 在上下文长度接近限制时，优先删除与现在任务无关的历史对话；
-- 在历史对话接近最大上下文限制时，调用/compact命令总结上下文对话，并继续执行任务。
+- 在历史对话接近最大上下文限制时，调用/compact命令总结上下文对话，并继续执行任务；
+- 在每次auto-compact后，在根目录创建一个Summary.md文件保存此次对话的总结，如果根目录已经有了Summary.md文件就更新这个文件。
 
 ## 数据读取规则！！
 
-- 在以了解数据格式为目的读取数据
+- 在以了解数据格式为目的读取数据时，没有必要读取全部数据，这样会占用大量上下文缓存，只需读取需要的几行数据了解数据格式就行了。
 
 ## Project Overview
 

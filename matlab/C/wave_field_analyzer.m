@@ -40,11 +40,47 @@ classdef wave_field_analyzer < handle
                 
                 % 显示控制
                 uicontrol('Parent', control_panel, 'Style', 'text', 'String', 'Display Options:', ...
-                          'Position', [10, 650, 100, 20], 'FontWeight', 'bold');
+                          'Position', [10, 700, 100, 20], 'FontWeight', 'bold');
                 
                 colormap_popup = uicontrol('Parent', control_panel, 'Style', 'popupmenu', ...
                                           'String', {'jet', 'hot', 'cool', 'gray', 'bone', 'parula'}, ...
-                                          'Position', [10, 620, 150, 25]);
+                                          'Position', [10, 670, 150, 25]);
+                
+                
+                % 平滑开关
+                smooth_checkbox = uicontrol('Parent', control_panel, 'Style', 'checkbox', ...
+                                           'String', 'Enable Smoothing', 'Value', 0, ...
+                                           'Position', [10, 650, 120, 20], ...
+                                           'Callback', @toggle_smoothing);
+                
+                % 平滑方法选择
+                uicontrol('Parent', control_panel, 'Style', 'text', 'String', 'Method:', ...
+                          'Position', [3, 625, 50, 20]);
+                smooth_method_popup = uicontrol('Parent', control_panel, 'Style', 'popupmenu', ...
+                                               'String', {'Gaussian', 'Average', 'Median', 'Bilateral'}, ...
+                                               'Position', [50, 625, 80, 20], ...
+                                               'Callback', @change_smooth_method);
+                
+                % 平滑强度滑块
+                uicontrol('Parent', control_panel, 'Style', 'text', 'String', 'Intensity:', ...
+                          'Position', [3, 600, 60, 20]);
+                smooth_intensity_slider = uicontrol('Parent', control_panel, 'Style', 'slider', ...
+                                                   'Position', [75, 600, 100, 20], ...
+                                                   'Min', 0.5, 'Max', 5.0, 'Value', 1.5, ...
+                                                   'SliderStep', [0.1/4.5, 0.5/4.5], ...
+                                                   'Callback', @change_smooth_intensity);
+                
+                smooth_intensity_text = uicontrol('Parent', control_panel, 'Style', 'text', ...
+                                                 'String', '1.5', ...
+                                                 'Position', [180, 600, 30, 20]);
+                
+                % 插值方法选择
+                uicontrol('Parent', control_panel, 'Style', 'text', 'String', 'Interpolation:', ...
+                          'Position', [10, 575, 80, 20]);
+                interp_method_popup = uicontrol('Parent', control_panel, 'Style', 'popupmenu', ...
+                                               'String', {'None', 'Linear', 'Cubic', 'Spline'}, ...
+                                               'Position', [150, 625, 80, 20], ...
+                                               'Callback', @change_interp_method);
                 
                 % 滤波控制
                 uicontrol('Parent', control_panel, 'Style', 'text', 'String', 'Filter Options:', ...
@@ -150,6 +186,12 @@ classdef wave_field_analyzer < handle
                 base_period = 0.1; % 基础播放周期（秒）
                 is_playing = false; % 动画播放状态
                 
+                % 平滑处理参数
+                use_smoothing = false;
+                smooth_method = 'Gaussian';
+                smooth_intensity = 1.5;
+                interp_method = 'None';
+                
                 % 初始显示
                 update_wavefield();
                 
@@ -188,7 +230,161 @@ classdef wave_field_analyzer < handle
                     end
                 end
                 
+                function toggle_smoothing(~, ~)
+                    use_smoothing = get(smooth_checkbox, 'Value');
+                    update_wavefield();
+                end
+                
+                function change_smooth_method(~, ~)
+                    methods = get(smooth_method_popup, 'String');
+                    smooth_method = methods{get(smooth_method_popup, 'Value')};
+                    if use_smoothing
+                        update_wavefield();
+                    end
+                end
+                
+                function change_smooth_intensity(~, ~)
+                    smooth_intensity = get(smooth_intensity_slider, 'Value');
+                    set(smooth_intensity_text, 'String', sprintf('%.1f', smooth_intensity));
+                    if use_smoothing
+                        update_wavefield();
+                    end
+                end
+                
+                function change_interp_method(~, ~)
+                    methods = get(interp_method_popup, 'String');
+                    interp_method = methods{get(interp_method_popup, 'Value')};
+                    update_wavefield();
+                end
+                
                 function update_wavefield()
+                    try
+                        % 显示当前时刻的波场
+                        axes(wave_axes);
+                        cla;
+                        
+                        wave_field = squeeze(filtered_data(:, :, current_time_idx));
+                        
+                        % 应用平滑处理
+                        if use_smoothing
+                            wave_field = apply_smoothing(wave_field, smooth_method, smooth_intensity);
+                        end
+                        
+                        % 应用插值处理
+                        if ~strcmp(interp_method, 'None')
+                            wave_field = apply_interpolation(wave_field, interp_method);
+                        end
+                        
+                        % 使用imagesc绘制并获取图像句柄
+                        h_image = imagesc(wave_field);
+                        axis equal;
+                        axis tight;
+                        
+                        % 设置颜色映射
+                        colormap_names = get(colormap_popup, 'String');
+                        colormap_idx = get(colormap_popup, 'Value');
+                        colormap(wave_axes, colormap_names{colormap_idx});
+                        colorbar(wave_axes);
+                        
+                        % 添加平滑状态到标题
+                        title_str = sprintf('Wave Field at t = %.2f μs', data_time(current_time_idx)*1e6);
+                        if use_smoothing
+                            title_str = [title_str, sprintf(' [%s Smoothed]', smooth_method)];
+                        end
+                        if ~strcmp(interp_method, 'None')
+                            title_str = [title_str, sprintf(' [%s Interp]', interp_method)];
+                        end
+                        title(wave_axes, title_str);
+                        
+                        xlabel(wave_axes, 'X Position');
+                        ylabel(wave_axes, 'Y Position');
+                        
+                        % 同时设置轴和图像的点击回调
+                        set(wave_axes, 'ButtonDownFcn', @wavefield_click);
+                        set(h_image, 'ButtonDownFcn', @wavefield_click);
+                        
+                        % 确保轴可以响应点击
+                        set(wave_axes, 'HitTest', 'on');
+                        set(h_image, 'HitTest', 'on');
+                        
+                    catch ME
+                        fprintf('更新波场显示失败: %s\n', ME.message);
+                    end
+                end
+                
+                function smoothed_field = apply_smoothing(wave_field, method, intensity)
+                    % 应用平滑处理
+                    try
+                        switch method
+                            case 'Gaussian'
+                                % 高斯滤波
+                                sigma = intensity;
+                                smoothed_field = imgaussfilt(wave_field, sigma);
+                                
+                            case 'Average'
+                                % 均值滤波
+                                kernel_size = max(3, round(intensity * 2) * 2 + 1); % 确保奇数
+                                h = fspecial('average', kernel_size);
+                                smoothed_field = imfilter(wave_field, h, 'replicate');
+                                
+                            case 'Median'
+                                % 中值滤波
+                                kernel_size = max(3, round(intensity * 2) * 2 + 1); % 确保奇数
+                                smoothed_field = medfilt2(wave_field, [kernel_size, kernel_size]);
+                                
+                            case 'Bilateral'
+                                % 双边滤波（如果可用）
+                                try
+                                    degree_of_smoothing = intensity * 10;
+                                    smoothed_field = imbilatfilt(wave_field, degree_of_smoothing);
+                                catch
+                                    % 如果imbilatfilt不可用，使用高斯滤波替代
+                                    smoothed_field = imgaussfilt(wave_field, intensity);
+                                end
+                                
+                            otherwise
+                                smoothed_field = wave_field;
+                        end
+                    catch
+                        % 如果平滑处理失败，返回原图像
+                        smoothed_field = wave_field;
+                    end
+                end
+                
+                function interp_field = apply_interpolation(wave_field, method)
+                    % 应用插值处理以增加分辨率
+                    try
+                        [m, n] = size(wave_field);
+                        scale_factor = 2; % 插值倍数
+                        
+                        % 创建新的网格
+                        [X, Y] = meshgrid(1:n, 1:m);
+                        [Xi, Yi] = meshgrid(1:1/scale_factor:n, 1:1/scale_factor:m);
+                        
+                        switch method
+                            case 'Linear'
+                                interp_field = interp2(X, Y, wave_field, Xi, Yi, 'linear');
+                                
+                            case 'Cubic'
+                                interp_field = interp2(X, Y, wave_field, Xi, Yi, 'cubic');
+                                
+                            case 'Spline'
+                                interp_field = interp2(X, Y, wave_field, Xi, Yi, 'spline');
+                                
+                            otherwise
+                                interp_field = wave_field;
+                        end
+                        
+                        % 处理NaN值
+                        interp_field(isnan(interp_field)) = 0;
+                        
+                    catch
+                        % 如果插值失败，返回原图像
+                        interp_field = wave_field;
+                    end
+                end
+                
+                function update_wavefield_old()
                     try
                         % 显示当前时刻的波场
                         axes(wave_axes);
