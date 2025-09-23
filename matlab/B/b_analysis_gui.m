@@ -23,7 +23,7 @@ function b_analysis_gui(varargin)
     numPoints = 13; % 默认13个点
     isFiltered = false;
     filterParams = struct('lowFreq', 100e3, 'highFreq', 1e6, 'order', 4); % 默认滤波参数
-    wavePacketTimeRange = [0, 10e-6]; % 默认波包时间范围 0-10微秒
+    wavePacketTimeRange = [8e-6, 18e-6]; % 默认波包时间范围 8-18微秒
     data_loaded_from_mat = false; % 标记是否从mat文件加载了数据
     
     % 检查是否有传入的数据
@@ -569,6 +569,8 @@ function b_analysis_gui(varargin)
         valid_idx = ~isnan(amplitudes);
         if any(valid_idx)
             plot(positions(valid_idx), amplitudes(valid_idx), 'b-o', 'LineWidth', 2, 'MarkerSize', 8);
+            % 手动设置纵坐标轴范围
+            % ylim([0, 1.2e-11]);
         end
         
         if numPoints > 1
