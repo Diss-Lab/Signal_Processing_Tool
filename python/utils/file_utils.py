@@ -152,10 +152,18 @@ class FileUtils:
             # 如果是高版本MAT文件（v7.3），使用h5py读取
             try:
                 import h5py
+                data = {}
                 with h5py.File(file_path, 'r') as f:
-                    data = {}
                     for key in f.keys():
-                        data[key] = np.array(f[key])
+                        # 跳过特殊变量
+                        if not key.startswith('#'):
+                            dataset = f[key]
+                            if isinstance(dataset, h5py.Dataset):
+                                # 获取数据并转换为numpy数组
+                                data[key] = np.array(dataset)
+                            else:
+                                # 如果是组，跳过或处理
+                                continue
                 return data
             except Exception as e:
                 raise Exception(f"读取高版本MAT文件失败: {str(e)}")

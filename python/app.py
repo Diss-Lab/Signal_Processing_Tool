@@ -7,6 +7,8 @@ sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 # 导入页面模块
 from pages.module_a_page import module_a_page
+from pages.module_b_page import module_b_page
+from pages.module_c_page import app as module_c_page
 
 def main():
     """
@@ -54,11 +56,9 @@ def main():
     elif module_choice == "📊 单点信号处理 (模块A)":
         module_a_page()
     elif module_choice == "📈 B扫描处理 (模块B)":
-        st.title("📈 B扫描处理")
-        st.info("🚧 模块B正在开发中，敬请期待...")
+        module_b_page()
     elif module_choice == "🌊 波场处理 (模块C)":
-        st.title("🌊 波场处理")
-        st.info("🚧 模块C正在开发中，敬请期待...")
+        module_c_page()
 
 def show_home_page():
     """

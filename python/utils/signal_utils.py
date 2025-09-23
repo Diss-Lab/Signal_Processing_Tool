@@ -25,6 +25,15 @@ class SignalUtils:
         nyq = 0.5 * fs
         low = lowcut / nyq
         high = highcut / nyq
+        
+        # 确保归一化频率在0-1之间
+        low = max(0.0, min(low, 0.99))
+        high = max(0.01, min(high, 0.99))
+        
+        # 确保低截止频率小于高截止频率
+        if low >= high:
+            low = max(0.0, high - 0.01)
+        
         b, a = signal.butter(order, [low, high], btype='band')
         return b, a
     
@@ -43,6 +52,10 @@ class SignalUtils:
         """
         nyq = 0.5 * fs
         normal_cutoff = cutoff / nyq
+        
+        # 确保归一化频率在0-1之间
+        normal_cutoff = max(0.01, min(normal_cutoff, 0.99))
+        
         b, a = signal.butter(order, normal_cutoff, btype='low')
         return b, a
     
@@ -61,6 +74,10 @@ class SignalUtils:
         """
         nyq = 0.5 * fs
         normal_cutoff = cutoff / nyq
+        
+        # 确保归一化频率在0-1之间
+        normal_cutoff = max(0.01, min(normal_cutoff, 0.99))
+        
         b, a = signal.butter(order, normal_cutoff, btype='high')
         return b, a
     

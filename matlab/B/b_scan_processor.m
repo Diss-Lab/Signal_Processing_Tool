@@ -2,6 +2,109 @@ classdef b_scan_processor < handle
     % B扫数据处理器 - 处理多个TXT文件并生成data.mat
     
     methods (Static)
+        function [success, processed_data] = process_files(file_paths, save_folder)
+            % 处理多个选择的TXT文件
+            % file_paths: 文件路径的cell数组或字符串数组
+            % save_folder: 保存data.mat的文件夹路径（可选）
+            success = false;
+            processed_data = struct();
+            
+            try
+                % 检查输入参数
+                if isempty(file_paths)
+                    error('未选择任何文件');
+                end
+                
+                % 确保file_paths是cell数组
+                if ischar(file_paths)
+                    file_paths = {file_paths};
+                elseif isstring(file_paths)
+                    file_paths = cellstr(file_paths);
+                end
+                
+                % 检查所有文件是否存在且为txt文件
+                valid_files = {};
+                for i = 1:length(file_paths)
+                    if exist(file_paths{i}, 'file')
+                        [~, ~, ext] = fileparts(file_paths{i});
+                        if strcmpi(ext, '.txt')
+                            valid_files{end+1} = file_paths{i};
+                        else
+                            warning('跳过非TXT文件: %s', file_paths{i});
+                        end
+                    else
+                        warning('文件不存在: %s', file_paths{i});
+                    end
+                end
+                
+                if isempty(valid_files)
+                    error('没有有效的TXT文件');
+                end
+                
+                fprintf('找到 %d 个有效TXT文件\n', length(valid_files));
+                
+                % 读取第一个文件获取时间信息
+                first_data = b_scan_processor.load_single_txt(valid_files{1});
+                data_time = first_data.time;
+                time_points = length(data_time);
+                fs = first_data.fs;
+                
+                % 初始化数据矩阵 [1 x file_count x time_points]
+                file_count = length(valid_files);
+                data_xyt = zeros(1, file_count, time_points);
+                
+                % 加载所有文件
+                h_wait = waitbar(0, '正在加载TXT文件...');
+                for i = 1:file_count
+                    try
+                        file_data = b_scan_processor.load_single_txt(valid_files{i});
+                        
+                        % 确保时间长度一致
+                        if length(file_data.signal) == time_points
+                            data_xyt(1, i, :) = file_data.signal;
+                        else
+                            % 处理长度不一致的情况
+                            min_len = min(length(file_data.signal), time_points);
+                            data_xyt(1, i, 1:min_len) = file_data.signal(1:min_len);
+                            warning('文件 %d 数据长度不一致，已截断或补零', i);
+                        end
+                        
+                    catch ME
+                        warning('加载文件失败: %s, 错误: %s', valid_files{i}, ME.message);
+                    end
+                    
+                    waitbar(i/file_count, h_wait, sprintf('正在处理文件 %d/%d', i, file_count));
+                end
+                close(h_wait);
+                
+                % 确定保存路径
+                if nargin < 2 || isempty(save_folder)
+                    % 如果没有指定保存文件夹，使用第一个文件所在的文件夹
+                    [save_folder, ~, ~] = fileparts(valid_files{1});
+                end
+                
+                % 保存data.mat文件
+                save_path = fullfile(save_folder, 'data.mat');
+                save(save_path, 'data_xyt', 'data_time', 'fs');
+                
+                % 返回处理结果
+                processed_data.data_xyt = data_xyt;
+                processed_data.data_time = data_time;
+                processed_data.fs = fs;
+                processed_data.file_count = file_count;
+                processed_data.save_path = save_path;
+                
+                success = true;
+                fprintf('数据处理完成，保存到: %s\n', save_path);
+                
+            catch ME
+                if exist('h_wait', 'var') && ishandle(h_wait)
+                    close(h_wait);
+                end
+                fprintf('处理失败: %s\n', ME.message);
+            end
+        end
+        
         function [success, processed_data] = process_folder(folder_path)
             % 处理文件夹中的TXT文件
             success = false;

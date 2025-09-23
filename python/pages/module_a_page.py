@@ -37,10 +37,19 @@ def module_a_page():
         )
         
         if uploaded_file is not None:
+<<<<<<< HEAD
             # 使用系统临时目录创建临时文件
             with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{uploaded_file.name}") as temp_file:
                 temp_file.write(uploaded_file.getbuffer())
                 temp_path = temp_file.name
+=======
+            # 保存上传的文件到临时位置
+            temp_dir = os.path.join(os.path.dirname(__file__), "..", "temp")
+            os.makedirs(temp_dir, exist_ok=True)
+            temp_path = os.path.join(temp_dir, uploaded_file.name)
+            with open(temp_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+>>>>>>> a2a14a7dfcd732cd5a7b5cd70d17dacb37b832db
             
             # 加载文件
             if processor.load_from_file(temp_path):
@@ -69,11 +78,15 @@ def module_a_page():
         # 示例数据按钮
         st.markdown("---")
         if st.button("📁 加载示例数据"):
+<<<<<<< HEAD
             # 使用相对路径找到示例数据文件
             current_dir = os.path.dirname(os.path.abspath(__file__))
             example_path = os.path.join(current_dir, "..", "data", "single_point", "sine_wave.txt")
             example_path = os.path.normpath(example_path)
             
+=======
+            example_path = os.path.join(os.path.dirname(__file__), "..", "data", "single_point", "sine_wave.txt")
+>>>>>>> a2a14a7dfcd732cd5a7b5cd70d17dacb37b832db
             if os.path.exists(example_path):
                 if processor.load_from_file(example_path):
                     st.success("✅ 示例数据加载成功")
@@ -310,10 +323,16 @@ def module_a_page():
         
         with col_export1:
             if st.button("📄 导出为MAT文件", use_container_width=True):
+<<<<<<< HEAD
                 # 使用临时文件
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".mat") as temp_file:
                     output_path = temp_file.name
                 
+=======
+                temp_dir = os.path.join(os.path.dirname(__file__), "..", "temp")
+                os.makedirs(temp_dir, exist_ok=True)
+                output_path = os.path.join(temp_dir, "processed_signal.mat")
+>>>>>>> a2a14a7dfcd732cd5a7b5cd70d17dacb37b832db
                 if processor.save_to_mat(output_path):
                     with open(output_path, "rb") as file:
                         st.download_button(
