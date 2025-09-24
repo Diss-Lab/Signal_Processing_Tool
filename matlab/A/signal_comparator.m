@@ -10,7 +10,10 @@ classdef signal_comparator < handle
             
             % 创建对比界面
             comp_fig = figure('Name', 'Signal Comparison Tool', 'Position', [150, 50, 1400, 800], ...
-                             'MenuBar', 'none', 'ToolBar', 'none');
+                             'MenuBar', 'figure', 'ToolBar', 'figure');
+            
+            % 添加自定义工具栏
+            signal_comparator.add_plot_editing_toolbar(comp_fig);
             
             % 存储对比数据
             comp_data = [];
@@ -561,6 +564,338 @@ classdef signal_comparator < handle
                     text(0.5, 0.5, ['Error: ' ME.message], 'Units', 'normalized', ...
                          'HorizontalAlignment', 'center');
                 end
+            end
+        end
+        
+        function add_plot_editing_toolbar(comp_fig)
+            % 添加图形编辑工具栏
+            try
+                % 创建自定义工具栏
+                htoolbar = uitoolbar('Parent', comp_fig);
+                
+                % 图标路径（MATLAB内置图标）
+                iconpath = fullfile(matlabroot, 'toolbox', 'matlab', 'icons');
+                
+                % 添加缩放工具
+                uipushtool(htoolbar, 'CData', imread(fullfile(iconpath, 'tool_zoom_in.png')), ...
+                          'TooltipString', '放大', 'ClickedCallback', @(~,~) zoom(comp_fig, 'on'));
+                
+                uipushtool(htoolbar, 'CData', imread(fullfile(iconpath, 'tool_zoom_out.png')), ...
+                          'TooltipString', '缩小', 'ClickedCallback', @(~,~) zoom(comp_fig, 'off'));
+                
+                % 添加平移工具
+                uipushtool(htoolbar, 'CData', imread(fullfile(iconpath, 'tool_hand.png')), ...
+                          'TooltipString', '平移', 'ClickedCallback', @(~,~) pan(comp_fig, 'on'));
+                
+                % 添加数据游标
+                uipushtool(htoolbar, 'CData', imread(fullfile(iconpath, 'tool_data_cursor.png')), ...
+                          'TooltipString', '数据游标', 'ClickedCallback', @(~,~) datacursormode(comp_fig, 'on'));
+                
+                % 添加分隔符
+                uipushtool(htoolbar, 'Separator', 'on');
+                
+                % 添加文本注释工具
+                try
+                    text_icon = imread(fullfile(iconpath, 'plottools_text.png'));
+                catch
+                    % 如果找不到图标，创建简单的文本图标
+                    text_icon = ones(16, 16, 3) * 0.8;
+                end
+                uipushtool(htoolbar, 'CData', text_icon, ...
+                          'TooltipString', '添加文本注释', ...
+                          'ClickedCallback', @(~,~) signal_comparator.add_text_annotation(comp_fig));
+                
+                % 添加线条标记工具
+                try
+                    line_icon = imread(fullfile(iconpath, 'plottools_line.png'));
+                catch
+                    % 如果找不到图标，创建简单的线条图标
+                    line_icon = ones(16, 16, 3) * 0.8;
+                end
+                uipushtool(htoolbar, 'CData', line_icon, ...
+                          'TooltipString', '添加标记线', ...
+                          'ClickedCallback', @(~,~) signal_comparator.add_marker_line(comp_fig));
+                
+                % 添加分隔符
+                uipushtool(htoolbar, 'Separator', 'on');
+                
+                % 添加保存工具
+                uipushtool(htoolbar, 'CData', imread(fullfile(iconpath, 'file_save.png')), ...
+                          'TooltipString', '保存图形', ...
+                          'ClickedCallback', @(~,~) signal_comparator.save_figure(comp_fig));
+                
+                % 添加另存为工具
+                try
+                    saveas_icon = imread(fullfile(iconpath, 'file_saveas.png'));
+                catch
+                    saveas_icon = imread(fullfile(iconpath, 'file_save.png'));
+                end
+                uipushtool(htoolbar, 'CData', saveas_icon, ...
+                          'TooltipString', '另存为...', ...
+                          'ClickedCallback', @(~,~) signal_comparator.save_figure_as(comp_fig));
+                
+                % 重置视图工具
+                uipushtool(htoolbar, 'CData', imread(fullfile(iconpath, 'tool_rotate_3d.png')), ...
+                          'TooltipString', '重置视图', ...
+                          'ClickedCallback', @(~,~) signal_comparator.reset_view(comp_fig));
+                
+            catch ME
+                fprintf('创建工具栏时出错: %s\n', ME.message);
+            end
+        end
+        
+        function add_text_annotation(comp_fig)
+            % 添加文本注释
+            try
+                % 让用户输入文本
+                text_str = inputdlg('请输入注释文本:', '添加文本注释', 1, {'注释文本'});
+                if isempty(text_str)
+                    return;
+                end
+                
+                % 设置鼠标点击模式
+                set(comp_fig, 'WindowButtonDownFcn', @(src, evt) place_text(src, evt, text_str{1}));
+                set(comp_fig, 'Pointer', 'crosshair');
+                
+                % 显示提示
+                msgbox('点击图形上的位置来放置文本注释', '添加注释', 'help');
+                
+            catch ME
+                msgbox(['添加文本注释失败: ' ME.message], 'Error', 'error');
+            end
+            
+            function place_text(src, ~, text_content)
+                % 获取当前坐标轴
+                current_axes = gca;
+                if ~isempty(current_axes)
+                    % 获取点击位置
+                    point = get(current_axes, 'CurrentPoint');
+                    x_pos = point(1, 1);
+                    y_pos = point(1, 2);
+                    
+                    % 添加文本
+                    text(x_pos, y_pos, text_content, 'FontSize', 12, ...
+                         'BackgroundColor', [1, 1, 0.8], 'EdgeColor', 'black', ...
+                         'HorizontalAlignment', 'center');
+                end
+                
+                % 恢复正常鼠标模式
+                set(src, 'WindowButtonDownFcn', '');
+                set(src, 'Pointer', 'arrow');
+            end
+        end
+        
+        function add_marker_line(comp_fig)
+            % 添加标记线
+            try
+                % 让用户选择线条类型
+                line_types = {'垂直线', '水平线', '自由线'};
+                [selection, ok] = listdlg('PromptString', '选择线条类型:', ...
+                                         'SelectionMode', 'single', ...
+                                         'ListString', line_types);
+                if ~ok
+                    return;
+                end
+                
+                switch selection
+                    case 1 % 垂直线
+                        signal_comparator.add_vertical_line(comp_fig);
+                    case 2 % 水平线
+                        signal_comparator.add_horizontal_line(comp_fig);
+                    case 3 % 自由线
+                        signal_comparator.add_free_line(comp_fig);
+                end
+                
+            catch ME
+                msgbox(['添加标记线失败: ' ME.message], 'Error', 'error');
+            end
+        end
+        
+        function add_vertical_line(comp_fig)
+            % 添加垂直标记线
+            set(comp_fig, 'WindowButtonDownFcn', @place_vline);
+            set(comp_fig, 'Pointer', 'crosshair');
+            msgbox('点击位置添加垂直标记线', '添加垂直线', 'help');
+            
+            function place_vline(src, ~)
+                current_axes = gca;
+                if ~isempty(current_axes)
+                    point = get(current_axes, 'CurrentPoint');
+                    x_pos = point(1, 1);
+                    ylims = get(current_axes, 'YLim');
+                    
+                    line([x_pos, x_pos], ylims, 'Color', 'red', 'LineWidth', 2, ...
+                         'LineStyle', '--', 'Parent', current_axes);
+                end
+                set(src, 'WindowButtonDownFcn', '');
+                set(src, 'Pointer', 'arrow');
+            end
+        end
+        
+        function add_horizontal_line(comp_fig)
+            % 添加水平标记线
+            set(comp_fig, 'WindowButtonDownFcn', @place_hline);
+            set(comp_fig, 'Pointer', 'crosshair');
+            msgbox('点击位置添加水平标记线', '添加水平线', 'help');
+            
+            function place_hline(src, ~)
+                current_axes = gca;
+                if ~isempty(current_axes)
+                    point = get(current_axes, 'CurrentPoint');
+                    y_pos = point(1, 2);
+                    xlims = get(current_axes, 'XLim');
+                    
+                    line(xlims, [y_pos, y_pos], 'Color', 'blue', 'LineWidth', 2, ...
+                         'LineStyle', '--', 'Parent', current_axes);
+                end
+                set(src, 'WindowButtonDownFcn', '');
+                set(src, 'Pointer', 'arrow');
+            end
+        end
+        
+        function add_free_line(comp_fig)
+            % 添加自由线条
+            set(comp_fig, 'WindowButtonDownFcn', @start_free_line);
+            set(comp_fig, 'Pointer', 'crosshair');
+            msgbox('点击并拖拽绘制自由线条', '添加自由线', 'help');
+            
+            function start_free_line(src, ~)
+                current_axes = gca;
+                if ~isempty(current_axes)
+                    point = get(current_axes, 'CurrentPoint');
+                    start_x = point(1, 1);
+                    start_y = point(1, 2);
+                    
+                    set(src, 'WindowButtonMotionFcn', @(s,e) draw_line(s, e, start_x, start_y));
+                    set(src, 'WindowButtonUpFcn', @end_free_line);
+                end
+            end
+            
+            function draw_line(src, ~, start_x, start_y)
+                current_axes = gca;
+                if ~isempty(current_axes)
+                    point = get(current_axes, 'CurrentPoint');
+                    end_x = point(1, 1);
+                    end_y = point(1, 2);
+                    
+                    % 删除之前的临时线
+                    temp_lines = findobj(current_axes, 'Tag', 'temp_line');
+                    delete(temp_lines);
+                    
+                    % 绘制临时线
+                    line([start_x, end_x], [start_y, end_y], 'Color', 'green', ...
+                         'LineWidth', 2, 'Tag', 'temp_line', 'Parent', current_axes);
+                end
+            end
+            
+            function end_free_line(src, ~)
+                % 将临时线变为永久线
+                current_axes = gca;
+                if ~isempty(current_axes)
+                    temp_lines = findobj(current_axes, 'Tag', 'temp_line');
+                    for i = 1:length(temp_lines)
+                        set(temp_lines(i), 'Tag', '');
+                    end
+                end
+                
+                set(src, 'WindowButtonDownFcn', '');
+                set(src, 'WindowButtonMotionFcn', '');
+                set(src, 'WindowButtonUpFcn', '');
+                set(src, 'Pointer', 'arrow');
+            end
+        end
+        
+        function save_figure(comp_fig)
+            % 快速保存图形（默认格式）
+            try
+                timestamp = datestr(now, 'yyyy-mm-dd_HH-MM-SS');
+                filename = sprintf('signal_comparison_%s.png', timestamp);
+                
+                % 保存到当前工作目录
+                saveas(comp_fig, filename, 'png');
+                msgbox(sprintf('图形已保存为: %s', filename), '保存成功', 'help');
+                
+            catch ME
+                msgbox(['保存失败: ' ME.message], 'Error', 'error');
+            end
+        end
+        
+        function save_figure_as(comp_fig)
+            % 另存为对话框
+            try
+                % 设置文件过滤器
+                filters = {
+                    '*.png', 'PNG图像文件 (*.png)';
+                    '*.jpg', 'JPEG图像文件 (*.jpg)';
+                    '*.tiff', 'TIFF图像文件 (*.tiff)';
+                    '*.eps', 'EPS矢量文件 (*.eps)';
+                    '*.pdf', 'PDF文件 (*.pdf)';
+                    '*.svg', 'SVG矢量文件 (*.svg)';
+                    '*.fig', 'MATLAB图形文件 (*.fig)';
+                    '*.*', '所有文件 (*.*)'
+                };
+                
+                % 默认文件名
+                timestamp = datestr(now, 'yyyy-mm-dd_HH-MM-SS');
+                default_name = sprintf('signal_comparison_%s', timestamp);
+                
+                [filename, pathname, filterindex] = uiputfile(filters, '保存图形', default_name);
+                
+                if filename ~= 0
+                    full_path = fullfile(pathname, filename);
+                    
+                    % 根据选择的格式保存
+                    switch filterindex
+                        case 1 % PNG
+                            saveas(comp_fig, full_path, 'png');
+                        case 2 % JPG
+                            saveas(comp_fig, full_path, 'jpg');
+                        case 3 % TIFF
+                            saveas(comp_fig, full_path, 'tiff');
+                        case 4 % EPS
+                            saveas(comp_fig, full_path, 'eps');
+                        case 5 % PDF
+                            saveas(comp_fig, full_path, 'pdf');
+                        case 6 % SVG
+                            saveas(comp_fig, full_path, 'svg');
+                        case 7 % FIG
+                            savefig(comp_fig, full_path);
+                        otherwise
+                            % 自动检测格式
+                            [~, ~, ext] = fileparts(filename);
+                            if strcmpi(ext, '.fig')
+                                savefig(comp_fig, full_path);
+                            else
+                                saveas(comp_fig, full_path);
+                            end
+                    end
+                    
+                    msgbox(sprintf('图形已保存为: %s', full_path), '保存成功', 'help');
+                end
+                
+            catch ME
+                msgbox(['保存失败: ' ME.message], 'Error', 'error');
+            end
+        end
+        
+        function reset_view(comp_fig)
+            % 重置所有坐标轴视图
+            try
+                all_axes = findobj(comp_fig, 'Type', 'axes');
+                for i = 1:length(all_axes)
+                    axis(all_axes(i), 'tight');
+                    grid(all_axes(i), 'on');
+                end
+                
+                % 关闭所有交互模式
+                zoom(comp_fig, 'off');
+                pan(comp_fig, 'off');
+                datacursormode(comp_fig, 'off');
+                
+                msgbox('视图已重置', '重置完成', 'help');
+                
+            catch ME
+                msgbox(['重置视图失败: ' ME.message], 'Error', 'error');
             end
         end
     end
