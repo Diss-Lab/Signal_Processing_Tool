@@ -23,7 +23,7 @@ function b_analysis_gui(varargin)
     numPoints = 13; % 默认13个点
     isFiltered = false;
     filterParams = struct('lowFreq', 100e3, 'highFreq', 1e6, 'order', 4); % 默认滤波参数
-    wavePacketTimeRange = [8e-6, 18e-6]; % 默认波包时间范围 8-18微秒
+    wavePacketTimeRange = [160e-6,400e-6]; % 默认波包时间范围 8-18微秒
     data_loaded_from_mat = false; % 标记是否从mat文件加载了数据
     
     % 检查是否有传入的数据
@@ -489,6 +489,9 @@ function b_analysis_gui(varargin)
         % 计算指定时间范围内最大绝对值
         max_amp = max(abs(signal_range));
         
+        % RMS值基于整个设定时间段的信号计算
+        rms_amp = rms(signal_range);
+        
         % 寻找超过阈值的点
         above_threshold = abs(signal_range) > threshold;
         
@@ -496,7 +499,6 @@ function b_analysis_gui(varargin)
             % 如果没有超过阈值的点，返回整个时间范围的统计值
             peak_amp = max(abs(signal_range));
             pp_amp = max(signal_range) - min(signal_range);
-            rms_amp = rms(signal_range);
             return;
         end
         
@@ -522,10 +524,9 @@ function b_analysis_gui(varargin)
         % 提取波包
         wave_packet = signal_range(wave_start:wave_end);
         
-        % 计算幅值
+        % 计算峰值和峰峰值基于波包，但RMS基于整个时间段
         peak_amp = max(abs(wave_packet));
         pp_amp = max(wave_packet) - min(wave_packet);
-        rms_amp = rms(wave_packet);
     end
 
     function updateAmplitudePlot(~, ~)
