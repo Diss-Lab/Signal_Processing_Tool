@@ -23,7 +23,7 @@ function b_analysis_gui(varargin)
     numPoints = 13; % 默认13个点
     isFiltered = false;
     filterParams = struct('lowFreq', 100e3, 'highFreq', 1e6, 'order', 4); % 默认滤波参数
-    wavePacketTimeRange = [160e-6,400e-6]; % 默认波包时间范围 8-18微秒
+    wavePacketTimeRange = [6.3e-6,40e-6]; % 默认波包时间范围 8-18微秒
     data_loaded_from_mat = false; % 标记是否从mat文件加载了数据
     
     % 检查是否有传入的数据
