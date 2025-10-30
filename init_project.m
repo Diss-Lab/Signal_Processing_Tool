@@ -12,7 +12,7 @@ function init_project()
     % 获取当前脚本所在目录（项目根目录）
     project_root = fileparts(mfilename('fullpath'));
     
-    % 定义需要添加的路径
+    % 定义需要添加的路径 - 只包含新架构路径
     paths_to_add = {
         % 新架构路径
         fullfile(project_root, 'core', 'signal_analysis'),
@@ -26,11 +26,8 @@ function init_project()
         fullfile(project_root, 'utils', 'math_tools'),
         fullfile(project_root, 'utils', 'ui_helpers'),
         fullfile(project_root, 'config'),
-        fullfile(project_root, 'tests'),
-        % % 旧模块路径（向后兼容）
-        % fullfile(project_root, 'A'),
-        % fullfile(project_root, 'B'),
-        % fullfile(project_root, 'C')
+        fullfile(project_root, 'tests')
+        % 移除: 不再添加A/B/C旧文件夹路径
     };
     
     % 添加路径
